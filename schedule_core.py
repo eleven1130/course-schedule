@@ -182,6 +182,65 @@ def free_time_week(
     return free_time_day(schedule, day, day_start, day_end, gap_tol=gap_tol)
 
 
+# ---------- 多人共同空闲时间 ----------
+def _intersect_two(
+    a: list[tuple[int, int]],
+    b: list[tuple[int, int]],
+) -> list[tuple[int, int]]:
+    """求两组区间的交集（两组均已按开始时间升序）。"""
+    i = j = 0
+    result: list[tuple[int, int]] = []
+    while i < len(a) and j < len(b):
+        s = max(a[i][0], b[j][0])
+        e = min(a[i][1], b[j][1])
+        if s < e:
+            result.append((s, e))
+        if a[i][1] < b[j][1]:
+            i += 1
+        else:
+            j += 1
+    return result
+
+
+def common_free_day(
+    schedules: list[Schedule],
+    day: int,
+    day_start: int,
+    day_end: int,
+    gap_tol: int = 15,
+) -> list[tuple[int, int]]:
+    """计算某一天所有人的共同空闲时段。"""
+    if not schedules:
+        return []
+    common = free_time_day(schedules[0], day, day_start, day_end, gap_tol=gap_tol)
+    for sch in schedules[1:]:
+        slots = free_time_day(sch, day, day_start, day_end, gap_tol=gap_tol)
+        common = _intersect_two(common, slots)
+        if not common:
+            break
+    return common
+
+
+def common_free_time(
+    schedules: list[Schedule],
+    day_start: int,
+    day_end: int,
+    gap_tol: int = 15,
+) -> list[tuple[int, int, int]]:
+    """计算一周内所有人的共同空闲时间，按时长降序排序。
+
+    返回列表元素为 (day, start, end)，其中 day 为 1~7。
+    排序规则：先按时长（end - start）降序，相同时按星期、开始时间升序，
+    保证「越长越靠前」。
+    """
+    results: list[tuple[int, int, int]] = []
+    for day in range(1, 8):
+        for s, e in common_free_day(schedules, day, day_start, day_end, gap_tol=gap_tol):
+            results.append((day, s, e))
+    results.sort(key=lambda x: (-(x[2] - x[1]), x[0], x[1]))
+    return results
+
+
 # ---------- 时间工具 ----------
 def parse_time(s: str) -> int:
     """'HH:MM' -> 分钟数。"""
