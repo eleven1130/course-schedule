@@ -108,6 +108,79 @@ class Schedule:
         lines.append("=" * 56)
         return "\n".join(lines)
 
+    def occupied_intervals(self, day: int) -> list[tuple[int, int]]:
+        """返回某天全部课程的 (start, end) 区间列表（按开始时间排序）。"""
+        return [(c.start, c.end) for c in self.courses_on(day)]
+
+
+# ---------- 区间合并 & 空闲时段 ----------
+def merge_intervals(
+    intervals: Iterable[tuple[int, int]],
+    gap_tol: int = 0,
+) -> list[tuple[int, int]]:
+    """合并有重叠或相邻的区间。
+
+    gap_tol: 允许吸收的最大间隔（分钟）。
+        例如同一门课连上两节，中间有 10 分钟休息，
+        设置 gap_tol>=10 即可把两段合并成一个占用区间，
+        从而避免在空闲时段里出现 10 分钟的碎片。
+    """
+    sorted_ivs = sorted(intervals, key=lambda x: x[0])
+    merged: list[tuple[int, int]] = []
+    for start, end in sorted_ivs:
+        if not merged:
+            merged.append((start, end))
+            continue
+        last_start, last_end = merged[-1]
+        if start <= last_end + gap_tol:
+            # 重叠或间隔在容忍范围内 -> 合并
+            merged[-1] = (last_start, max(last_end, end))
+        else:
+            merged.append((start, end))
+    return merged
+
+
+def free_time_day(
+    schedule: Schedule,
+    day: int,
+    day_start: int,
+    day_end: int,
+    gap_tol: int = 15,
+) -> list[tuple[int, int]]:
+    """计算某人某天的空闲时段。
+
+    day_start / day_end: 每日可用时间范围（分钟数）。
+    gap_tol: 合并课程小间隔的阈值（分钟），默认 15。
+    返回空闲区间列表 (start, end)，按开始时间升序。
+    """
+    occupied = merge_intervals(schedule.occupied_intervals(day), gap_tol=gap_tol)
+    free: list[tuple[int, int]] = []
+    cursor = day_start
+    for s, e in occupied:
+        if e <= day_start:
+            continue
+        if s >= day_end:
+            break
+        seg_start = max(s, day_start)
+        if cursor < seg_start:
+            free.append((cursor, seg_start))
+        cursor = max(cursor, e)
+    if cursor < day_end:
+        free.append((cursor, day_end))
+    # 裁剪到 [day_start, day_end]
+    return [(max(s, day_start), min(e, day_end)) for s, e in free if s < e]
+
+
+def free_time_week(
+    schedule: Schedule,
+    day: int,
+    day_start: int,
+    day_end: int,
+    gap_tol: int = 15,
+) -> list[tuple[int, int]]:
+    """兼容接口：返回某一天的空闲时段列表。"""
+    return free_time_day(schedule, day, day_start, day_end, gap_tol=gap_tol)
+
 
 # ---------- 时间工具 ----------
 def parse_time(s: str) -> int:
